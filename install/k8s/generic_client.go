@@ -3,6 +3,7 @@ package k8s
 import (
 	"context"
 	"fmt"
+	"github.com/kyma-incubator/hydroform/install/k8s/maputil"
 
 	"github.com/kyma-incubator/hydroform/install/util"
 
@@ -88,21 +89,10 @@ func (c GenericClient) ApplyConfigMaps(configMaps []*corev1.ConfigMap, namespace
 }
 
 func (c GenericClient) updateConfigMap(client corev1Client.ConfigMapInterface, cm *corev1.ConfigMap) error {
-	oldCM, err := client.Get(context.Background(), cm.Name, v1.GetOptions{})
-	if err != nil {
-		return err
-	}
+	mergeFunc := NewConfigMapMergeFunc(client, cm)
+	updateFunc := NewConfigMapUpdateFunc(client, cm)
 
-	mergedData := MergeStringMaps(oldCM.Data, cm.Data)
-
-	cm.Data = mergedData
-
-	_, err = client.Update(context.Background(), cm, v1.UpdateOptions{})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return update(mergeFunc, updateFunc, cm.Labels)
 }
 
 func (c GenericClient) ApplySecrets(secrets []*corev1.Secret, namespace string) error {
@@ -126,21 +116,11 @@ func (c GenericClient) ApplySecrets(secrets []*corev1.Secret, namespace string) 
 }
 
 func (c GenericClient) updateSecret(client corev1Client.SecretInterface, secret *corev1.Secret) error {
-	oldSecret, err := client.Get(context.Background(), secret.Name, v1.GetOptions{})
-	if err != nil {
-		return err
-	}
 
-	mergedData := MergeByteMaps(oldSecret.Data, secret.Data)
+	mergeFunc := NewSecretMergeFunc(client, secret)
+	updateFunc := NewSecretUpdateFunc(client, secret)
 
-	secret.Data = mergedData
-
-	_, err = client.Update(context.Background(), secret, v1.UpdateOptions{})
-	if err != nil {
-		return err
-	}
-
-	return nil
+	return update(mergeFunc, updateFunc, secret.Labels)
 }
 
 func (c GenericClient) CreateResources(resources []K8sObject) ([]*unstructured.Unstructured, error) {
@@ -208,7 +188,7 @@ func (c GenericClient) updateObject(client dynamic.ResourceInterface, unstructur
 		return nil, err
 	}
 
-	merged := MergeMaps(unstructuredObject.Object, get.Object)
+	merged := maputil.MergeMaps(unstructuredObject.Object, get.Object)
 
 	newObject := &unstructured.Unstructured{Object: merged}
 
